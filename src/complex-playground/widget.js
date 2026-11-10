@@ -178,6 +178,24 @@ export function createComplexPlaygroundWidget({
   // ---- interaction ------------------------------------------------------------------------------
 
   let drag = null; // {what: a number's name | "pan", p: [x, y], center: [re, im]}
+  let hover = null; // the number's name, or the expression, whose arrows are under the pointer, drawn bolder
+  let lastArrows = []; // the arrows as last drawn, for hit-testing
+
+  // The owner of the arrow nearest the pointer, tip or shaft, if it is close enough.
+  function hovered(p) {
+    const [x0, y0] = toPx([0, 0]);
+    let best = null, bestD = GRAB;
+    for (const a of lastArrows) {
+      const d = segmentDist(p, [x0, y0], toPx(a.z));
+      if (d < bestD) { best = a.owner; bestD = d; }
+    }
+    return best;
+  }
+  function setHover(owner) {
+    if (owner === hover) return;
+    hover = owner;
+    render();
+  }
 
   svg.addEventListener("pointerdown", e => {
     const p = pointer(e);
@@ -198,11 +216,13 @@ export function createComplexPlaygroundWidget({
     drag = {what: hit(p) ?? "pan", p, center};
     svg.setPointerCapture(e.pointerId);
     svg.style.cursor = "grabbing";
+    if (drag.what !== "pan") setHover(drag.what);
   });
   svg.addEventListener("pointermove", e => {
     const p = pointer(e);
     if (!drag) {
       svg.style.cursor = hit(p) ? "pointer" : "grab";
+      setHover(hovered(p));
     } else if (drag.what === "pan") {
       center = [drag.center[0] - (p[0] - drag.p[0]) / scale, drag.center[1] + (p[1] - drag.p[1]) / scale];
       render();
@@ -215,6 +235,7 @@ export function createComplexPlaygroundWidget({
   const release = () => { drag = null; svg.style.cursor = "grab"; };
   svg.addEventListener("pointerup", release);
   svg.addEventListener("pointercancel", release);
+  svg.addEventListener("pointerleave", () => { if (!drag) setHover(null); });
   svg.addEventListener("contextmenu", e => e.preventDefault()); // ctrl-click is a right click on a Mac
   svg.addEventListener("wheel", e => {
     e.preventDefault();
@@ -290,26 +311,29 @@ export function createComplexPlaygroundWidget({
     }
     for (const x of expressions) {
       evaluate(x);
-      x.values.forEach((z, k) => arrows.push({z, theta: z[2], color: x.color, name: k ? "" : x.name || pretty(x.text)}));
+      x.values.forEach((z, k) => arrows.push({z, theta: z[2], color: x.color, name: k ? "" : x.name || pretty(x.text), owner: x}));
     }
-    for (const name in vars) arrows.push({z: vars[name], theta: angles[name], color: CONTROL_COLORS[name], name});
+    for (const name in vars) arrows.push({z: vars[name], theta: angles[name], color: CONTROL_COLORS[name], name, owner: name});
+    lastArrows = arrows;
 
+    // The hovered arrows last, and bolder, so that they are on top of the others.
     let marks = "";
-    arrows.forEach(({z, theta, color, name}, i) => {
+    arrows.forEach((a, i) => { a.ring = 28 + 8 * i; }); // the angle spiral's radius: one ring per arrow
+    for (const {z, theta, color, name, owner, ring} of [...arrows.filter(a => a.owner !== hover), ...arrows.filter(a => a.owner === hover)]) {
+      const bold = owner === hover;
       const [x, y] = toPx(z);
       const r = Math.hypot(z[0], z[1]);
       if (cartesianBox.input.checked) {
-        marks += `<path d="M${x},${y}V${y0}M${x},${y}H${x0}" stroke="${color}" stroke-dasharray="4 4" opacity=".6"/>`;
+        marks += `<path d="M${x},${y}V${y0}M${x},${y}H${x0}" stroke="${color}" stroke-dasharray="4 4" opacity=".6"${bold ? ' stroke-width="4"' : ""}/>`;
       }
-      const a = 28 + 8 * i; // the angle arc's radius: one ring per arrow
-      if (polarBox.input.checked && r * scale > a) marks += spiral([x0, y0], a, theta, color);
-      marks += arrow([x0, y0], [x, y], color);
+      if (polarBox.input.checked && r * scale > ring) marks += spiral([x0, y0], ring, theta, color, bold);
+      marks += arrow([x0, y0], [x, y], color, bold);
       const lines = [];
       if (cartesianBox.input.checked) lines.push(`${name && name + " = "}${cartesianForm(z, decimals)}`);
       if (polarBox.input.checked) lines.push(`${lines.length ? "= " : name && name + " = "}${polarForm(r, theta, decimals)}`);
       if (!lines.length && name) lines.push(name);
-      if (lines.length) marks += label([x, y], [x - x0, y - y0], lines, color);
-    });
+      if (lines.length) marks += label([x, y], [x - x0, y - y0], lines, color, bold);
+    }
 
     const hint = arrows.length ? "" :
       halo(`<text x="${W / 2}" y="${H / 2 - 40}" font-size="16" fill="#888" text-anchor="middle">cmd-click / ctrl-click to add a complex z</text>`);
@@ -333,27 +357,30 @@ export function createComplexPlaygroundWidget({
       text.title = "Edit";
       text.style.cssText = `cursor:text;${x === editing ? "text-decoration:underline dotted;" : ""}`;
       text.addEventListener("click", () => edit(x));
+      chip.addEventListener("pointerenter", () => setHover(x));
+      chip.addEventListener("pointerleave", () => setHover(null));
       chip.append(text, x.error ? note(x.error) : "", button("×", () => { remove(x); emit(); }, "Remove"));
       return chip;
     }));
   }
 
-  function arrow([x0, y0], [x, y], color) {
+  function arrow([x0, y0], [x, y], color, bold) {
     const L = Math.hypot(x - x0, y - y0);
-    if (L < 1) return `<circle cx="${x}" cy="${y}" r="4" fill="${color}"/>`;
-    const h = Math.min(12, L), ux = (x - x0) / L * h, uy = (y - y0) / L * h; // the head's length along the arrow
+    if (L < 1) return `<circle cx="${x}" cy="${y}" r="${bold ? 6 : 4}" fill="${color}"/>`;
+    const h = Math.min(bold ? 15 : 12, L), ux = (x - x0) / L * h, uy = (y - y0) / L * h; // the head's length along the arrow
     const bx = x - ux, by = y - uy; // the base of the head
-    return `<line x1="${x0}" y1="${y0}" x2="${bx}" y2="${by}" stroke="${color}"/>` +
+    return `<line x1="${x0}" y1="${y0}" x2="${bx}" y2="${by}" stroke="${color}"${bold ? ' stroke-width="4"' : ""}/>` +
       `<polygon points="${x},${y} ${bx - uy * 0.4},${by + ux * 0.4} ${bx + uy * 0.4},${by - ux * 0.4}" fill="${color}"/>`;
   }
 
   // Text just beyond the tip, continuing the arrow's direction; none for a tip out of view.
-  function label([x, y], [dx, dy], lines, color) {
+  function label([x, y], [dx, dy], lines, color, bold) {
     if (x < 0 || x > W || y < 0 || y > H) return "";
     const L = Math.hypot(dx, dy) || 1;
-    const ax = x + dx / L * 14, ay = y + dy / L * 14 + 5 - (dy < 0 ? (lines.length - 1) * 18 : 0);
-    const tspans = lines.map((t, i) => `<tspan x="${ax}" dy="${i ? 18 : 0}">${t}</tspan>`).join("");
-    return halo(`<text x="${ax}" y="${ay}" font-size="15" font-weight="600" fill="${color}" text-anchor="${dx < 0 ? "end" : "start"}">${tspans}</text>`);
+    const lineHeight = bold ? 20 : 18;
+    const ax = x + dx / L * 14, ay = y + dy / L * 14 + 5 - (dy < 0 ? (lines.length - 1) * lineHeight : 0);
+    const tspans = lines.map((t, i) => `<tspan x="${ax}" dy="${i ? lineHeight : 0}">${t}</tspan>`).join("");
+    return halo(`<text x="${ax}" y="${ay}" font-size="${bold ? 17 : 15}" font-weight="${bold ? 800 : 600}" fill="${color}" text-anchor="${dx < 0 ? "end" : "start"}">${tspans}</text>`);
   }
 
   // ---- value ------------------------------------------------------------------------------------
@@ -523,13 +550,19 @@ function unwrap(theta, previous = theta) {
 // The angle theta drawn at the origin, from the positive real axis, as a spiral that gains
 // SPIRAL_PITCH px of radius a turn, so that more than one turn can be seen.
 const SPIRAL_PITCH = 6;
-function spiral([x0, y0], a, theta, color) {
+function spiral([x0, y0], a, theta, color, bold) {
   const n = Math.max(1, Math.ceil(Math.abs(theta) / (Math.PI / 36)));
   const points = Array.from({length: n + 1}, (_, k) => {
     const phi = theta * k / n, r = a + SPIRAL_PITCH * Math.abs(phi) / (2 * Math.PI);
     return `${x0 + r * Math.cos(phi)},${y0 - r * Math.sin(phi)}`;
   });
-  return `<polyline points="${points.join(" ")}" stroke="${color}" fill="none"/>`;
+  return `<polyline points="${points.join(" ")}" stroke="${color}" fill="none"${bold ? ' stroke-width="4"' : ""}/>`;
+}
+// The distance from p to the segment ab.
+function segmentDist(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+  const t = L2 ? clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2, 0, 1) : 0;
+  return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
 }
 const isZero = (x, d) => Math.abs(x) < 0.5 * 10 ** -d;
 const isInteger = x => Math.abs(x - Math.round(x)) < 1e-9;
