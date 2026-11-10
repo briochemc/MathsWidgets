@@ -4,8 +4,8 @@
 // on the plane adds the next number there, and on a number's tip removes it, along with
 // every expression that uses it. The plane starts empty, with a hint saying so. Drag the
 // background to pan; scroll, pinch or use the buttons to zoom; the ⛶ button takes the whole
-// window. A tip dragged close to a grid point, the unit circle or a grid line (the axes
-// included) snaps onto it. The toggles label every arrow in Cartesian form (a + bi, with
+// window. A tip dragged close to a grid node, the unit circle or an axis snaps onto it. The
+// toggles label every arrow in Cartesian form (a + bi, with
 // dashed projections onto the axes) and in polar form (r e^{iθ}, with θ as a multiple of π
 // and a spiral at the origin for it). A number's θ is unwrapped: dragged round the origin,
 // it keeps counting past π instead of jumping to −π, and the spiral winds with it.
@@ -24,7 +24,7 @@ const SVG = "http://www.w3.org/2000/svg";
 const CONTROL_COLORS = {z1: "#d4aa00", z2: "#d4aa00", z3: "#d4aa00"}; // the numbers are all yellow...
 const EXPRESSION_COLORS = ["#0072B2", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#000000"]; // ...and the expressions are not
 const GRAB = 16; // px around an arrowhead within which a press picks it up
-const SNAP = 10; // px within which a dragged tip snaps onto a grid point, the unit circle or a grid line
+const SNAP = 10; // px within which a dragged tip snaps onto a grid node, the unit circle or an axis
 const MAX_VALUES = 64; // an expression's values are cut off there, for roots of roots of roots
 const MAX_WIDTH = 640;
 
@@ -116,12 +116,12 @@ export function createComplexPlaygroundWidget({
   function hit(p) {
     return Object.keys(vars).find(name => dist(p, toPx(vars[name])) <= GRAB);
   }
-  // Onto the nearest grid point, else the unit circle, else a grid line (the axes included),
-  // whichever is close enough first.
+  // Onto the nearest grid node, else the unit circle, else an axis, whichever is close
+  // enough first; not onto other grid lines, so 1 + 3.234i stays where it is put.
   function snap(z) {
     const step = gridStep(), r = Math.hypot(z[0], z[1]) || 1;
     const near = v => Math.round(v / step) * step;
-    const candidates = [[near(z[0]), near(z[1])], [z[0] / r, z[1] / r], [near(z[0]), z[1]], [z[0], near(z[1])]];
+    const candidates = [[near(z[0]), near(z[1])], [z[0] / r, z[1] / r], [0, z[1]], [z[0], 0]];
     return candidates.find(c => dist(c, z) * scale < SNAP) ?? z;
   }
 
