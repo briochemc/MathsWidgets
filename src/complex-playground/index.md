@@ -10,7 +10,9 @@ import {createComplexPlaygroundWidget} from "./widget.js";
 const z = view(createComplexPlaygroundWidget());
 ```
 
-Expressions use `+`, `-`, `*`, `/`, `^` and parentheses, with juxtaposition for multiplication (`2i`, `z1 z2`); the constants `i`, `e` and `pi`; and the functions `conj`, `abs`, `arg`, `re`, `im`, `exp`, `log`, `sqrt` and `roots`. Powers, `sqrt` and `log` are single-valued, giving the principal value; `roots(z, n)` gives all ${tex`n`} of the ${tex`n`}-th roots of ${tex`z`}.
+Expressions use `+`, `-`, `*`, `/`, `^` and parentheses, with juxtaposition for multiplication (`2i`, `z1 z2`); the constants `i`, `e` and `pi`; and the functions `conj`, `abs`, `arg`, `re`, `im`, `exp`, `log`, `sqrt` and `roots`. Powers, `sqrt` and `log` are single-valued; `roots(z, n)` gives all ${tex`n`} of the ${tex`n`}-th roots of ${tex`z`}.
+
+Each number's angle ${tex`\theta`} is tracked as it moves: dragged round the origin it keeps counting past ${tex`\pi`} rather than jumping to ${tex`-\pi`}, and the polar spiral winds with it. The angle carries through the arithmetic where there is a rule for it: a product adds its factors' angles, a quotient subtracts them, and a power multiplies, so `z1^2` turns twice as fast as ${tex`z_1`} and `sqrt(z1)` half as fast, coming back negated after one turn of ${tex`z_1`}. A number as placed has its principal angle, so these agree with the principal values until a number is taken round the origin. Where there is no rule, as for a sum, the principal angle is shown.
 
 ## Embed this widget
 

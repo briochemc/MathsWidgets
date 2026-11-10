@@ -14,8 +14,10 @@
 // set of its values, since roots(z, 5) has five and every operation combines all the values
 // of its operands. The syntax is the usual one: + − * / ^ and parentheses, juxtaposition for
 // multiplication (2i, z1 z2), the constants i, e and pi, and the functions conj, abs, arg,
-// re, im, exp, log, sqrt and roots(z, n). Powers and sqrt are single-valued (the principal
-// value); only roots gives all n.
+// re, im, exp, log, sqrt and roots(z, n). Powers, sqrt and log are single-valued; only
+// roots gives all n. Each value carries its angle along with it: a product's is the sum of
+// its factors', a power's the multiple, so the angle of z1^2 is twice z1's, turns included,
+// while a sum's is the principal one, since there is no rule for it.
 //
 // The whole picture is one SVG rebuilt from a string on every change. The state is the
 // numbers, the expressions and the view: the number at the centre and the pixels per unit.
@@ -228,13 +230,13 @@ export function createComplexPlaygroundWidget({
     // Every arrow to draw: the expressions' values first, then the numbers on top of them.
     const arrows = [];
     for (const x of expressions) {
-      try { x.values = x.evaluate(vars); x.error = null; } catch (e) { x.values = []; x.error = e.message; }
-      x.values.forEach((z, k) => arrows.push({z, color: x.color, name: k ? "" : pretty(x.text)}));
+      try { x.values = x.evaluate({vars, angles}); x.error = null; } catch (e) { x.values = []; x.error = e.message; }
+      x.values.forEach((z, k) => arrows.push({z, theta: z[2], color: x.color, name: k ? "" : pretty(x.text)}));
     }
     for (const name in vars) arrows.push({z: vars[name], theta: angles[name], color: CONTROL_COLORS[name], name: `${it("z")}${name[1]}`});
 
     let marks = "";
-    arrows.forEach(({z, theta = arg(z), color, name}, i) => {
+    arrows.forEach(({z, theta, color, name}, i) => {
       const [x, y] = toPx(z);
       const r = Math.hypot(z[0], z[1]);
       if (cartesianBox.input.checked) {
@@ -296,7 +298,7 @@ export function createComplexPlaygroundWidget({
     container.value = {
       variables: Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, [...v]])),
       angles: {...angles}, // unwrapped, in radians
-      expressions: expressions.map(({text, values}) => ({text, values})),
+      expressions: expressions.map(({text, values}) => ({text, values: values.map(v => v.slice(0, 2)), angles: values.map(v => v[2])})),
     };
     const plain = ([re, im]) => `${num(re, 2)} + ${num(im, 2)}i`;
     svg.setAttribute("aria-label", `The complex plane with ${Object.keys(vars).map(k => `${k} = ${plain(vars[k])}`).join(", ")} ` +
@@ -322,34 +324,48 @@ export function createComplexPlaygroundWidget({
 
 // ---- expressions --------------------------------------------------------------------------------
 
+// A value is [re, im, θ]: the number and its angle. The angle follows the rules there are
+// (a product adds its factors' angles, a quotient subtracts, a power multiplies, conj
+// negates, exp takes the imaginary part) and is the principal argument, in (−π, π],
+// where there is none, as for a sum. So z1's angle, unwrapped as it is dragged round the
+// origin, doubles in z1^2 and halves in sqrt(z1), turns included.
+const principal = ([a, b]) => [a, b, Math.atan2(b, a)];
 const FUNCTIONS = {
-  conj: ([a, b]) => [a, -b],
-  abs: ([a, b]) => [Math.hypot(a, b), 0],
-  arg: ([a, b]) => [Math.atan2(b, a), 0],
-  re: ([a]) => [a, 0],
-  im: ([, b]) => [b, 0],
-  exp: ([a, b]) => [Math.exp(a) * Math.cos(b), Math.exp(a) * Math.sin(b)],
-  log: ([a, b]) => [Math.log(Math.hypot(a, b)), Math.atan2(b, a)],
+  conj: ([a, b, t]) => [a, -b, -t],
+  abs: ([a, b]) => [Math.hypot(a, b), 0, 0],
+  arg: ([, , t]) => principal([t, 0]),
+  re: ([a]) => principal([a, 0]),
+  im: ([, b]) => principal([b, 0]),
+  exp: ([a, b]) => [Math.exp(a) * Math.cos(b), Math.exp(a) * Math.sin(b), b],
+  log: ([a, b, t]) => principal([Math.log(Math.hypot(a, b)), t]),
 };
-const CONSTANTS = {i: [0, 1], e: [Math.E, 0], pi: [Math.PI, 0], π: [Math.PI, 0]};
-const mul = ([a, b], [c, d]) => [a * c - b * d, a * d + b * c];
-const div = ([a, b], [c, d]) => [(a * c + b * d) / (c * c + d * d), (b * c - a * d) / (c * c + d * d)];
+const CONSTANTS = {i: [0, 1, Math.PI / 2], e: [Math.E, 0, 0], pi: [Math.PI, 0, 0], π: [Math.PI, 0, 0]};
+const add = ([a, b], [c, d]) => principal([a + c, b + d]);
+const sub = ([a, b], [c, d]) => principal([a - c, b - d]);
+const neg = ([a, b, t]) => [-a, -b, t + Math.PI];
+const mul = ([a, b, t], [c, d, u]) => [a * c - b * d, a * d + b * c, t + u];
+const div = ([a, b, t], [c, d, u]) => [(a * c + b * d) / (c * c + d * d), (b * c - a * d) / (c * c + d * d), t - u];
 
-// z^w, the principal value: exp(w log z).
+// z^w = exp(w log z), with log z = ln r + iθ for z's own angle θ: the principal value for
+// a number as placed, and continuous as it is dragged round the origin, so sqrt(z1) comes
+// back negated after one turn, as on its Riemann surface.
 function pow(z, w) {
   const [c, d] = w;
-  if (z[0] === 0 && z[1] === 0) return c > 0 ? [0, 0] : c === 0 && d === 0 ? [1, 0] : [NaN, NaN];
+  if (z[0] === 0 && z[1] === 0) return c > 0 ? [0, 0, 0] : c === 0 && d === 0 ? [1, 0, 0] : [NaN, NaN, NaN];
   return FUNCTIONS.exp(mul(w, FUNCTIONS.log(z)));
 }
 // The n n-th roots of z: r^(1/n) e^{i(θ + 2πk)/n} for k = 0 … n−1.
-function roots([a, b], [n, m]) {
+function roots([a, b, theta], [n, m]) {
   if (m !== 0 || !isInteger(n) || n < 1) throw new Error("roots(z, n) needs a whole number n");
   n = Math.round(n);
-  const r = Math.hypot(a, b) ** (1 / n), theta = Math.atan2(b, a);
-  return Array.from({length: n}, (_, k) => [r * Math.cos((theta + 2 * Math.PI * k) / n), r * Math.sin((theta + 2 * Math.PI * k) / n)]);
+  const r = Math.hypot(a, b) ** (1 / n);
+  return Array.from({length: n}, (_, k) => {
+    const phi = (theta + 2 * Math.PI * k) / n;
+    return [r * Math.cos(phi), r * Math.sin(phi), phi];
+  });
 }
 
-// Compiles an expression to a function of the variables returning the list of its values,
+// Compiles an expression to a function of {vars, angles} returning the list of its values,
 // by recursive descent: sum > product > unary minus > power > atom. Every operation is
 // applied to all combinations of its operands' values.
 function compile(text) {
@@ -357,15 +373,13 @@ function compile(text) {
   let k = 0;
   const peek = () => tokens[k], next = () => tokens[k++];
   const expect = t => { if (next() !== t) throw new SyntaxError(`Expected ${t}`); };
-  const map1 = (f, a) => vars => a(vars).map(f);
-  const map2 = (f, a, b) => vars => a(vars).flatMap(x => b(vars).map(y => f(x, y)));
-  const flat2 = (f, a, b) => vars => a(vars).flatMap(x => b(vars).flatMap(y => f(x, y)));
+  const map1 = (f, a) => env => a(env).map(f);
+  const map2 = (f, a, b) => env => a(env).flatMap(x => b(env).map(y => f(x, y)));
+  const flat2 = (f, a, b) => env => a(env).flatMap(x => b(env).flatMap(y => f(x, y)));
 
   function sum() {
     let a = product();
-    while (peek() === "+" || peek() === "-") {
-      a = map2(next() === "+" ? ([a, b], [c, d]) => [a + c, b + d] : ([a, b], [c, d]) => [a - c, b - d], a, product());
-    }
+    while (peek() === "+" || peek() === "-") a = map2(next() === "+" ? add : sub, a, product());
     return a;
   }
   function product() {
@@ -377,7 +391,7 @@ function compile(text) {
     }
   }
   function unary() {
-    return peek() === "-" ? (next(), map1(([a, b]) => [-a, -b], unary())) : power();
+    return peek() === "-" ? (next(), map1(neg, unary())) : power();
   }
   function power() {
     const a = atom();
@@ -386,29 +400,32 @@ function compile(text) {
   function atom() {
     const t = next();
     if (t === "(") { const a = sum(); expect(")"); return a; }
-    if (/^[\d.]/.test(t)) { const v = [Number(t), 0]; return () => [v]; }
+    if (/^[\d.]/.test(t)) { const v = [Number(t), 0, 0]; return () => [v]; }
     if (t in CONSTANTS) return () => [CONSTANTS[t]];
     if (t in FUNCTIONS || t === "sqrt" || t === "roots") {
       expect("(");
       const a = sum();
       if (t === "roots") { expect(","); const n = sum(); expect(")"); return flat2(roots, a, n); }
       expect(")");
-      return t === "sqrt" ? map2(pow, a, () => [[0.5, 0]]) : map1(FUNCTIONS[t], a);
+      return t === "sqrt" ? map2(pow, a, () => [[0.5, 0, 0]]) : map1(FUNCTIONS[t], a);
     }
-    if (/^z[1-3]$/.test(t)) return vars => { if (!vars[t]) throw new Error(`There is no ${t}`); return [vars[t]]; };
+    if (/^z[1-3]$/.test(t)) {
+      return ({vars, angles}) => { if (!vars[t]) throw new Error(`There is no ${t}`); return [[...vars[t], angles[t]]]; };
+    }
     throw new SyntaxError(t === undefined ? "Unexpected end" : `Unexpected ${t}`);
   }
 
   const f = sum();
   if (k < tokens.length) throw new SyntaxError(`Unexpected ${peek()}`);
-  return vars => distinct(f(vars)).slice(0, MAX_VALUES);
+  return env => distinct(f(env)).slice(0, MAX_VALUES);
 }
 
-// The finite values, without repeats (z^(1/2) z^(1/2) has two values, not four).
+// The finite values, without repeats of the same number (roots(z1, 2) roots(z1, 2) has two
+// values, not four).
 function distinct(values) {
   const out = [];
   for (const v of values) {
-    if (Number.isFinite(v[0]) && Number.isFinite(v[1]) && !out.some(u => Math.hypot(u[0] - v[0], u[1] - v[1]) < 1e-9)) out.push(v);
+    if (v.every(Number.isFinite) && !out.some(u => Math.hypot(u[0] - v[0], u[1] - v[1]) < 1e-9)) out.push(v);
   }
   return out;
 }
@@ -469,7 +486,7 @@ function cartesianForm([re, im], d) {
 }
 // r e^{iθ} with θ as a multiple of π: a fraction like 3π/4 when it is one, else a decimal.
 function polarForm(r, theta, d) {
-  const t = theta / Math.PI; // in (−1, 1]
+  const t = theta / Math.PI; // any size: a tracked angle can have gone round a few times
   if (isZero(r, d)) return "0";
   if (Math.abs(t) < 1e-9) return num(r, d);
   const a = Math.abs(t);
