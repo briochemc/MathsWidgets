@@ -233,7 +233,7 @@ export function createComplexPlaygroundWidget({
       try { x.values = x.evaluate({vars, angles}); x.error = null; } catch (e) { x.values = []; x.error = e.message; }
       x.values.forEach((z, k) => arrows.push({z, theta: z[2], color: x.color, name: k ? "" : pretty(x.text)}));
     }
-    for (const name in vars) arrows.push({z: vars[name], theta: angles[name], color: CONTROL_COLORS[name], name: `${it("z")}${name[1]}`});
+    for (const name in vars) arrows.push({z: vars[name], theta: angles[name], color: CONTROL_COLORS[name], name});
 
     let marks = "";
     arrows.forEach(({z, theta, color, name}, i) => {
@@ -253,7 +253,7 @@ export function createComplexPlaygroundWidget({
     });
 
     const hint = arrows.length ? "" :
-      halo(`<text x="${W / 2}" y="${H / 2 - 40}" font-size="16" fill="#888" text-anchor="middle">cmd-click / ctrl-click to add a complex ${it("z")}</text>`);
+      halo(`<text x="${W / 2}" y="${H / 2 - 40}" font-size="16" fill="#888" text-anchor="middle">cmd-click / ctrl-click to add a complex z</text>`);
 
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
     svg.innerHTML =
@@ -430,10 +430,10 @@ function distinct(values) {
   return out;
 }
 
-// The expression as typed, with z and i in italics, π, and a dot for *.
+// The expression as typed, with i in italics (not z: upright z1 sets better), π, and a
+// dot for *.
 function pretty(text) {
   return text.replace(/[&<>]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;"}[c]))
-    .replace(/\bz(?=[1-3]\b)/g, it("z"))
     .replace(/\bi\b( ?)/g, (_, space) => I + (space || THIN))
     .replace(/\bpi\b/g, "π")
     .replace(/\*/g, "·");
