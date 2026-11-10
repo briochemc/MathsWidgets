@@ -1,6 +1,6 @@
 # Complex playground
 
-Ctrl-click (or ⌘-click) on the plane to add a number there, up to three: ${tex`z_1`}, ${tex`z_2`}, ${tex`z_3`}. Drag their tips; every arrow computed from them follows. Ctrl-click on a tip to remove that number, and with it every expression that uses it. Type an expression in the field under the figure to draw it: `z1^3`, `roots(z1, 5)` (all five fifth roots), `(z1 + z2)/2`, `1/z1`, `conj(z2)`, `exp(i z1)`. Give an expression a name to use it in others: `z4 = z1 + z2`, then `z5 = roots(z4, 3)`. A tip snaps onto the grid or the unit circle when it is close. Drag the background to pan, scroll to zoom, and press ⛶ for the whole window. The toggles show each arrow in Cartesian and polar form.
+Ctrl-click (or ⌘-click) on the plane to add a number there, up to three: ${tex`z_1`}, ${tex`z_2`}, ${tex`z_3`}. Drag their tips; every arrow computed from them follows. Ctrl-click on a tip to remove that number, and with it every expression that uses it. Type an expression in the field under the figure to draw it: `z1^3`, `roots(z1, 5)` (all five fifth roots), `(z1 + z2)/2`, `1/z1`, `conj(z2)`, `exp(i z1)`. Give an expression a name to use it in others: `z4 = z1 + z2`, then `z5 = roots(z4, 3)`. Click an expression under the field to edit it, or its × to remove it. A tip snaps onto the grid or the unit circle when it is close. Drag the background to pan, scroll to zoom, and press ⛶ for the whole window. The toggles show each arrow in Cartesian and polar form.
 
 ```js
 import {createComplexPlaygroundWidget} from "./widget.js";

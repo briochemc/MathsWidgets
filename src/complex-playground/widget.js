@@ -82,18 +82,31 @@ export function createComplexPlaygroundWidget({
   const chips = document.createElement("span");
   chips.style.cssText = "display:contents;";
   form.append(input, chips);
+  let editing = null; // the expression whose text is in the field, for the next submit to replace
   form.addEventListener("submit", e => {
     e.preventDefault();
     if (add(input.value)) input.value = "";
   });
   input.addEventListener("input", e => { e.stopPropagation(); input.setCustomValidity(""); });
+  input.addEventListener("keydown", e => { if (e.key === "Escape" && editing) { input.value = ""; add(""); } });
   container.appendChild(form);
 
+  function edit(x) {
+    editing = x;
+    input.value = x.text;
+    input.focus();
+    render();
+  }
+
   // Adds an expression, or a definition "z4 = …", which other expressions can then use;
-  // defining a name again replaces its definition.
+  // defining a name again replaces its definition. While an expression is being edited,
+  // the new text replaces it instead, and an empty text leaves it as it was.
   function add(text) {
     text = text.trim();
-    if (!text) return false;
+    if (!text) {
+      if (editing) { editing = null; render(); }
+      return false;
+    }
     try {
       const [, name, source] = text.match(/^(?:([a-zA-Z_]\w*)\s*=\s*)?(.+)$/s);
       if (name) {
@@ -103,11 +116,14 @@ export function createComplexPlaygroundWidget({
       }
       const evaluate = compile(source);
       const existing = name && expressions.find(x => x.name === name);
-      const color = existing?.color ?? EXPRESSION_COLORS.find(c => !expressions.some(x => x.color === c)) ??
+      if (editing && existing && existing !== editing) throw new Error(`${name} is already defined`);
+      const target = editing ?? existing;
+      const color = target?.color ?? EXPRESSION_COLORS.find(c => !expressions.some(x => x.color === c)) ??
         EXPRESSION_COLORS[expressions.length % EXPRESSION_COLORS.length];
       const x = {text, name, source, evaluate, color};
-      if (existing) expressions.splice(expressions.indexOf(existing), 1, x);
+      if (target) expressions.splice(expressions.indexOf(target), 1, x);
       else expressions.push(x);
+      editing = null;
     } catch (e) {
       input.setCustomValidity(e.message);
       input.reportValidity();
@@ -121,6 +137,7 @@ export function createComplexPlaygroundWidget({
     const i = expressions.indexOf(x);
     if (i < 0) return;
     expressions.splice(i, 1);
+    if (x === editing) { editing = null; input.value = ""; }
     if (x.name) removeUsing(x.name);
   }
   function removeUsing(name) {
@@ -306,11 +323,17 @@ export function createComplexPlaygroundWidget({
       `<g stroke-width="2.5" stroke-linecap="round">${marks}</g>` +
       hint;
 
-    // The list of expressions under the field, each with its colour and a button to remove it.
+    // The list of expressions under the field, each with its colour, a click on its text to
+    // edit it and a button to remove it.
     chips.replaceChildren(...expressions.map(x => {
       const chip = document.createElement("span");
       chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;color:${x.color};font-weight:600;`;
-      chip.append(x.text, x.error ? note(x.error) : "", button("×", () => { remove(x); emit(); }, "Remove"));
+      const text = document.createElement("span");
+      text.textContent = x.text;
+      text.title = "Edit";
+      text.style.cssText = `cursor:text;${x === editing ? "text-decoration:underline dotted;" : ""}`;
+      text.addEventListener("click", () => edit(x));
+      chip.append(text, x.error ? note(x.error) : "", button("×", () => { remove(x); emit(); }, "Remove"));
       return chip;
     }));
   }
