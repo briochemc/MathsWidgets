@@ -178,22 +178,25 @@ export function createComplexPlaygroundWidget({
   // ---- interaction ------------------------------------------------------------------------------
 
   let drag = null; // {what: a number's name | "pan", p: [x, y], center: [re, im]}
-  let hover = null; // the number's name, or the expression, whose arrows are under the pointer, drawn bolder
+  // What is drawn bolder: one arrow, as {owner, k} (a number's name, or an expression and
+  // which of its values), or a whole expression, from its chip under the field.
+  let hover = null;
   let lastArrows = []; // the arrows as last drawn, for hit-testing
 
-  // The owner of the arrow nearest the pointer, tip or shaft, if it is close enough.
+  // The arrow nearest the pointer, tip or shaft, if it is close enough.
   function hovered(p) {
     const [x0, y0] = toPx([0, 0]);
     let best = null, bestD = GRAB;
     for (const a of lastArrows) {
       const d = segmentDist(p, [x0, y0], toPx(a.z));
-      if (d < bestD) { best = a.owner; bestD = d; }
+      if (d < bestD) { best = {owner: a.owner, k: a.k}; bestD = d; }
     }
     return best;
   }
-  function setHover(owner) {
-    if (owner === hover) return;
-    hover = owner;
+  const highlighted = a => hover != null && (hover === a.owner || (hover.owner === a.owner && hover.k === a.k));
+  function setHover(h) {
+    if (h === hover || (h && hover && h.owner === hover.owner && h.k === hover.k)) return;
+    hover = h;
     render();
   }
 
@@ -216,7 +219,7 @@ export function createComplexPlaygroundWidget({
     drag = {what: hit(p) ?? "pan", p, center};
     svg.setPointerCapture(e.pointerId);
     svg.style.cursor = "grabbing";
-    if (drag.what !== "pan") setHover(drag.what);
+    if (drag.what !== "pan") setHover({owner: drag.what});
   });
   svg.addEventListener("pointermove", e => {
     const p = pointer(e);
@@ -311,7 +314,7 @@ export function createComplexPlaygroundWidget({
     }
     for (const x of expressions) {
       evaluate(x);
-      x.values.forEach((z, k) => arrows.push({z, theta: z[2], color: x.color, name: k ? "" : x.name || pretty(x.text), owner: x}));
+      x.values.forEach((z, k) => arrows.push({z, theta: z[2], color: x.color, name: k ? "" : x.name || pretty(x.text), owner: x, k}));
     }
     for (const name in vars) arrows.push({z: vars[name], theta: angles[name], color: CONTROL_COLORS[name], name, owner: name});
     lastArrows = arrows;
@@ -319,8 +322,7 @@ export function createComplexPlaygroundWidget({
     // The hovered arrows last, and bolder, so that they are on top of the others.
     let marks = "";
     arrows.forEach((a, i) => { a.ring = 28 + 8 * i; }); // the angle spiral's radius: one ring per arrow
-    for (const {z, theta, color, name, owner, ring} of [...arrows.filter(a => a.owner !== hover), ...arrows.filter(a => a.owner === hover)]) {
-      const bold = owner === hover;
+    for (const {z, theta, color, name, ring, bold} of arrows.map(a => ({...a, bold: highlighted(a)})).sort((a, b) => a.bold - b.bold)) {
       const [x, y] = toPx(z);
       const r = Math.hypot(z[0], z[1]);
       if (cartesianBox.input.checked) {
