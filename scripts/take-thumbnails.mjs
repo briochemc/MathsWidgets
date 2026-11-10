@@ -29,7 +29,7 @@ const SCALE = 2;
 // load does not match it. `query` is appended to the embed page's URL, for widgets whose
 // opening frame is not their best one: the playground opens empty.
 const WIDGETS = [
-  {name: "complex-playground", query: "?z1=2,1&z2=1,1&show=z1*z2;roots(z1,5)"},
+  {name: "complex-playground", query: "?z1=2,1&z2=1,1&show=z1*z2;roots(z1,5)&cartesian=1"},
 ].map(w => ({figure: `.${w.name}`, ...w}));
 
 // A blank capture comes out near 7 kB, a real one far bigger; a last guard against

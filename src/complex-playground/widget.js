@@ -35,7 +35,7 @@ const THIN = " "; // a thin space after an italic i, which leans into what fol
 export function createComplexPlaygroundWidget({
   variables = {},
   expressions: initialExpressions = [],
-  cartesian = true,
+  cartesian = false,
   polar = false,
   width = MAX_WIDTH,
 } = {}) {

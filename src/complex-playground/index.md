@@ -34,7 +34,7 @@ display(embedSnippets({
 
   // The plane starts empty. Options: {variables: {z1: [2, 1], z2: [1, 1]}} puts numbers
   // on it as [re, im]; {expressions: ["z1 z2"]} adds expressions;
-  // {cartesian: true, polar: false} sets the toggles; {width: 480} caps the figure's side.
+  // {cartesian: true, polar: true} turns the toggles on; {width: 480} caps the figure's side.
   document.getElementById("complex-playground")
     .appendChild(createComplexPlaygroundWidget());
 <\/script>`
