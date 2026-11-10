@@ -30,8 +30,8 @@ body {
 import {createComplexPlaygroundWidget} from "./widget.js";
 
 // The plane starts empty. ?z1=2,1&z2=1,1&z3=0,-1 puts numbers on it, as re,im;
-// ?show=z1*z2;roots(z1,5) adds expressions, separated by semicolons; ?cartesian=1 and
-// ?polar=1 turn the toggles on.
+// ?show=z1*z2;z4=z1+z2;roots(z4,3) adds expressions, separated by semicolons;
+// ?cartesian=1 and ?polar=1 turn the toggles on.
 const params = new URLSearchParams(location.search);
 const flag = (name, fallback) => params.has(name) ? params.get(name) !== "0" : fallback;
 const variables = {};

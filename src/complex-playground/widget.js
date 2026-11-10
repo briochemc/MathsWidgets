@@ -15,7 +15,8 @@
 // of its operands. The syntax is the usual one: + − * / ^ and parentheses, juxtaposition for
 // multiplication (2i, z1 z2), the constants i, e and pi, and the functions conj, abs, arg,
 // re, im, exp, log, sqrt and roots(z, n). Powers, sqrt and log are single-valued; only
-// roots gives all n. Each value carries its angle along with it: a product's is the sum of
+// roots gives all n. "z4 = z1 + z2" defines z4 for other expressions to use; a name stands
+// for all of its values. Each value carries its angle along with it: a product's is the sum of
 // its factors', a power's the multiple, so the angle of z1^2 is twice z1's, turns included,
 // while a sum's is the principal one, since there is no rule for it.
 //
@@ -46,7 +47,7 @@ export function createComplexPlaygroundWidget({
   for (const name of Object.keys(CONTROL_COLORS)) {
     if (variables[name]) { vars[name] = [...variables[name]]; angles[name] = arg(vars[name]); }
   }
-  const expressions = []; // {text, color, evaluate, values, error}
+  const expressions = []; // {text, name, source, color, evaluate, values, error}: name and source are the two sides of "z4 = z1 + z2"
   let W = Math.min(width, MAX_WIDTH), H = W;
   let center = [0, 0]; // the complex number at the middle of the picture
   let scale = W / 7;   // pixels per unit: ±3.5 in view to start with
@@ -76,7 +77,7 @@ export function createComplexPlaygroundWidget({
   const form = document.createElement("form");
   form.style.cssText = "display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin-top:8px;";
   const input = document.createElement("input");
-  input.placeholder = "z1^3, roots(z1, 5), (z1 + z2)/2, exp(i z1) …";
+  input.placeholder = "z1^3, roots(z1, 5), exp(i z1), z4 = z1 + z2 …";
   input.style.cssText = "flex:1;min-width:200px;font:inherit;padding:4px 8px;border:1px solid #ccc;border-radius:6px;";
   const chips = document.createElement("span");
   chips.style.cssText = "display:contents;";
@@ -88,13 +89,25 @@ export function createComplexPlaygroundWidget({
   input.addEventListener("input", e => { e.stopPropagation(); input.setCustomValidity(""); });
   container.appendChild(form);
 
+  // Adds an expression, or a definition "z4 = …", which other expressions can then use;
+  // defining a name again replaces its definition.
   function add(text) {
     text = text.trim();
     if (!text) return false;
     try {
-      const color = EXPRESSION_COLORS.find(c => !expressions.some(x => x.color === c)) ??
+      const [, name, source] = text.match(/^(?:([a-zA-Z_]\w*)\s*=\s*)?(.+)$/s);
+      if (name) {
+        if (name in vars) throw new Error(`${name} is a number on the plane`);
+        if (name in CONSTANTS) throw new Error(`${name} is a constant`);
+        if (name in FUNCTIONS || name === "sqrt" || name === "roots") throw new Error(`${name} is a function`);
+      }
+      const evaluate = compile(source);
+      const existing = name && expressions.find(x => x.name === name);
+      const color = existing?.color ?? EXPRESSION_COLORS.find(c => !expressions.some(x => x.color === c)) ??
         EXPRESSION_COLORS[expressions.length % EXPRESSION_COLORS.length];
-      expressions.push({text, evaluate: compile(text), color});
+      const x = {text, name, source, evaluate, color};
+      if (existing) expressions.splice(expressions.indexOf(existing), 1, x);
+      else expressions.push(x);
     } catch (e) {
       input.setCustomValidity(e.message);
       input.reportValidity();
@@ -102,6 +115,17 @@ export function createComplexPlaygroundWidget({
     }
     emit();
     return true;
+  }
+  // Removes an expression and, if it defines a name, everything that uses the name.
+  function remove(x) {
+    const i = expressions.indexOf(x);
+    if (i < 0) return;
+    expressions.splice(i, 1);
+    if (x.name) removeUsing(x.name);
+  }
+  function removeUsing(name) {
+    const uses = new RegExp(`\\b${name}\\b`);
+    for (const x of [...expressions]) if (uses.test(x.source)) remove(x);
   }
 
   // ---- coordinates ------------------------------------------------------------------------------
@@ -145,7 +169,7 @@ export function createComplexPlaygroundWidget({
       if (name) { // and the expressions that use it go with it
         delete vars[name];
         delete angles[name];
-        for (let i = expressions.length; i--;) if (new RegExp(`\\b${name}\\b`).test(expressions[i].text)) expressions.splice(i, 1);
+        removeUsing(name);
       } else {
         const free = Object.keys(CONTROL_COLORS).find(n => !vars[n]);
         if (free) { vars[free] = snap(toZ(p)); angles[free] = arg(vars[free]); }
@@ -229,9 +253,27 @@ export function createComplexPlaygroundWidget({
 
     // Every arrow to draw: the expressions' values first, then the numbers on top of them.
     const arrows = [];
+    // A name used in an expression is evaluated on demand, whichever order the expressions
+    // were typed in, once per render; a definition that comes back to itself is an error.
+    const done = new Set(), busy = new Set();
+    const env = {vars, angles, lookup(name) {
+      const x = expressions.find(x => x.name === name);
+      if (!x) throw new Error(`There is no ${name}`);
+      evaluate(x);
+      if (x.error) throw new Error(`${name} has no value`);
+      return x.values;
+    }};
+    function evaluate(x) {
+      if (done.has(x)) return;
+      if (busy.has(x)) throw new Error(`${x.name} is defined in terms of itself`);
+      busy.add(x);
+      try { x.values = x.evaluate(env); x.error = null; } catch (e) { x.values = []; x.error = e.message; }
+      busy.delete(x);
+      done.add(x);
+    }
     for (const x of expressions) {
-      try { x.values = x.evaluate({vars, angles}); x.error = null; } catch (e) { x.values = []; x.error = e.message; }
-      x.values.forEach((z, k) => arrows.push({z, theta: z[2], color: x.color, name: k ? "" : pretty(x.text)}));
+      evaluate(x);
+      x.values.forEach((z, k) => arrows.push({z, theta: z[2], color: x.color, name: k ? "" : x.name || pretty(x.text)}));
     }
     for (const name in vars) arrows.push({z: vars[name], theta: angles[name], color: CONTROL_COLORS[name], name});
 
@@ -265,10 +307,10 @@ export function createComplexPlaygroundWidget({
       hint;
 
     // The list of expressions under the field, each with its colour and a button to remove it.
-    chips.replaceChildren(...expressions.map((x, i) => {
+    chips.replaceChildren(...expressions.map(x => {
       const chip = document.createElement("span");
       chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;color:${x.color};font-weight:600;`;
-      chip.append(x.text, x.error ? note(x.error) : "", button("×", () => { expressions.splice(i, 1); emit(); }, "Remove"));
+      chip.append(x.text, x.error ? note(x.error) : "", button("×", () => { remove(x); emit(); }, "Remove"));
       return chip;
     }));
   }
@@ -298,7 +340,7 @@ export function createComplexPlaygroundWidget({
     container.value = {
       variables: Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, [...v]])),
       angles: {...angles}, // unwrapped, in radians
-      expressions: expressions.map(({text, values}) => ({text, values: values.map(v => v.slice(0, 2)), angles: values.map(v => v[2])})),
+      expressions: expressions.map(({text, name, values}) => ({text, name, values: values.map(v => v.slice(0, 2)), angles: values.map(v => v[2])})),
     };
     const plain = ([re, im]) => `${num(re, 2)} + ${num(im, 2)}i`;
     svg.setAttribute("aria-label", `The complex plane with ${Object.keys(vars).map(k => `${k} = ${plain(vars[k])}`).join(", ")} ` +
@@ -409,8 +451,8 @@ function compile(text) {
       expect(")");
       return t === "sqrt" ? map2(pow, a, () => [[0.5, 0, 0]]) : map1(FUNCTIONS[t], a);
     }
-    if (/^z[1-3]$/.test(t)) {
-      return ({vars, angles}) => { if (!vars[t]) throw new Error(`There is no ${t}`); return [[...vars[t], angles[t]]]; };
+    if (/^[a-zA-Z_]\w*$/.test(t)) { // a number on the plane, or a name defined by an expression
+      return env => env.vars[t] ? [[...env.vars[t], env.angles[t]]] : env.lookup(t);
     }
     throw new SyntaxError(t === undefined ? "Unexpected end" : `Unexpected ${t}`);
   }
