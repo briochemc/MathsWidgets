@@ -1,0 +1,16 @@
+{
+  "name": "maths-widgets",
+  "version": "1.0.0",
+  "description": "Interactive maths widgets built with Observable Framework",
+  "type": "module",
+  "private": "true",
+  "scripts": {
+    "dev": "observable preview",
+    "build": "observable build",
+    "thumbnails": "node scripts/take-thumbnails.mjs"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@observablehq/framework": "^1.13.4"
+  }
+}

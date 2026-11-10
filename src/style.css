@@ -1,0 +1,7 @@
+/* The Air theme, with the body text in the sans-serif that the headings already use. */
+@import url("observablehq:default.css");
+@import url("observablehq:theme-air.css");
+
+body {
+  font-family: var(--sans-serif);
+}

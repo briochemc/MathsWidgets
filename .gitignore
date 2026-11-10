@@ -1,0 +1,18 @@
+# Node
+node_modules/
+
+# Build output & caches
+dist/
+**/.observablehq/cache/
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code machine-local overrides
+.claude/settings.local.json
